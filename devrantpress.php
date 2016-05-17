@@ -7,15 +7,14 @@ Author: m.matthews
 Version: 0.1
 Author URI: https://github.com/mmatthews1981
 */
-
 add_action('admin_head', 'my_custom_admin_css');
 
 function my_custom_admin_css() {
 	echo '<style>
 		#devrantpress_widget {
 			width: inherit;
-    height: 350px;
-    overflow-x: hidden;
+    		height: 350px;
+    		overflow-x: hidden;
 		}
 		
 		#devrantpress_widget.closed {
@@ -104,103 +103,79 @@ function my_custom_admin_css() {
   </style>';
 }
 
-add_action('wp_dashboard_setup', 'devrantpress_dashboard_widget');
-
-function devrantpress_dashboard_widget() {
-	add_meta_box('devrantpress_widget', 'devRantPress', 'devrantpress', 'dashboard', 'normal','core');
+// Function that outputs the contents of the dashboard widget
+function dashboard_widget_function() {
+    echo '<button id="devrantpress_top" >top</button>';
+    echo '<button id="devrantpress_recent" >recent</button>';
+    echo '<button id="devrantpress_algo" >algo</button>';
+    echo '<div id="devrantpress_widget"></div>';
 }
 
-function getthejson($url){
-	$json_url = $url;
-	$ch = curl_init($json_url);
-	$options = array(
-		CURLOPT_RETURNTRANSFER => true,
-		CURLOPT_HTTPHEADER => array('Accept: application/json')
-	);
-	curl_setopt_array($ch, $options);
-	return json_decode(curl_exec($ch), true);
+// Function used in the action hook
+function add_dashboard_widgets() {
+    wp_add_dashboard_widget('devrantpress', 'devrantpress', 'dashboard_widget_function');
 }
 
-function devrantpress_button(){
+// Register the new dashboard widget with the 'wp_dashboard_setup' action
+add_action('wp_dashboard_setup', 'add_dashboard_widgets' );
 
-	if(null == get_option('devrantpress_sort')){update_option( 'devrantpress_sort', 'recent', true );}
+add_action( 'admin_footer', 'my_action_javascript' ); // Write our JS below here
 
-	// This function creates the output for the admin page.
-	// It also checks the value of the $_POST variable to see whether
-	// there has been a form submission.
+function my_action_javascript() { ?>
+	<script type="text/javascript" >
 
-	// The check_admin_referer is a WordPress function that does some security
-	// checking and is recommended good practice.
+	jQuery(document).ready(function($) {
 
-	// General check for user permissions.
-	if (!current_user_can('manage_options'))  {
-		wp_die( __('You do not have sufficient pilchards to access this page.')    );
-	}
+		function mapallthethings(thing){
+			$("#devrantpress_widget").empty();
+				$.each(thing.rants, function(i, rant){
+		        var thecode = '<div class="devrant-container">';
+					thecode += '<div class="devrant-box left">';
+						thecode += '<div class="devrant-textscore">'+rant.score+'</div>';
+						thecode += '<div class="devrant-textlink"><a href="https://www.devrant.io/rants/'+rant.id+'">link</a></div>';
+					thecode += '</div>';
 
-	// Start building the page
+					thecode += '<div class="devrant-box right">';
+						thecode += '<div class="devrant-name"><a href="https://www.devrant.io/users/'+rant.user_username+'">'+rant.user_username+'</a><span class="devrant-userscore">'+rant.user_score+'</span></div>';
+						thecode += '<div class="devrant-text">'+rant.text+'</div>';
 
-	echo '<div class="wrap">';
+						if(rant.attached_image) {
+							thecode += '<img src="'+rant.attached_image.url+'" />';
+						}
+						if(rant.tags) {
+							thecode += '<div class="devrant-tags">tags: ' + rant.tags.join(', ')+ '</div>';
+						}
+					thecode += '</div>';
+					thecode += '</div>';
 
-	echo '<form action="index.php" method="post">';
-	wp_nonce_field('test_button_clicked');
-	echo '<input type="hidden" value="true" name="test_button" />';
-	$options = get_option( 'devrantpress_sort' );
-	echo '<label>top</label>';
-	echo '<input type="radio" name="devrantpress_sort" value="top"'.checked($options['devrantpress_sort'], 'top', true  ).' />';
-	echo '<label>recent</label>';
-	echo '<input type="radio" name="devrantpress_sort" value="recent"'.checked( $options['devrantpress_sort'], 'recent', true ).' />';
-	echo '<label>algo</label>';
-	echo '<input type="radio" name="devrantpress_sort" value="algo"'.checked( $options['devrantpress_sort'], 'algo', true ).' />';
+					thecode += '<hr>';
+	        	
+	            $("#devrantpress_widget").append(thecode);
+	        });
+		}
 
-	submit_button('update devRant');
-	echo '</form>';
+  		$.getJSON("https://crossorigin.me/https://www.devrant.io/api/devrant/rants?app=3&sort=recent", function(result){
+  			return mapallthethings(result);
+	    });
 
-	echo '</div>';
+	    $("#devrantpress_top").click(function(){
+	    	$.getJSON("https://crossorigin.me/https://www.devrant.io/api/devrant/rants?app=3&sort=top", function(result){
+		        return mapallthethings(result);
+	    	});
+	    });
 
-	// Check whether the button has been pressed
-	if (isset($_POST['test_button']) && check_admin_referer('test_button_clicked')) {
-		// the button has been pressed AND we've passed the security check
-		$devrantstream = getthejson('https://www.devrant.io/api/devrant/rants?app=3&sort=recent');
+	    $("#devrantpress_recent").click(function(){
+	    	$.getJSON("https://crossorigin.me/https://www.devrant.io/api/devrant/rants?app=3&sort=recent", function(result){
+				return mapallthethings(result);
+	    	});
+	    });
 
-		update_option( 'devrantpress_sort', $_POST['devrantpress_sort'], true );
+	    $("#devrantpress_algo").click(function(){
+	    	$.getJSON("https://crossorigin.me/https://www.devrant.io/api/devrant/rants?app=3&sort=algo", function(result){
+				return mapallthethings(result);
+	    	});
+	    });
 
-		update_option( 'devrantpress_feedcache', $devrantstream, true );
-	}
-}
-
-function devrantpressresults(){
-	$rants = get_option('devrantpress_feedcache');
-	echo '<div>';
-
-	foreach ($rants['rants'] as $rant){
-		echo '<div class="devrant-container">';
-		echo '<div class="devrant-box left">';
-			echo '<div class="devrant-textscore">'.$rant['score'].'</div>';
-			echo '<div class="devrant-textlink"><a href="https://www.devrant.io/rants/'.$rant['id'].'">link</a></div>';
-		echo '</div>';
-
-		echo '<div class="devrant-box right">';
-			echo '<div class="devrant-name"><a href="https://www.devrant.io/users/'.$rant['user_username'].'">'.$rant['user_username'].'</a><span class="devrant-userscore">'.$rant['user_score'].'</span></div>';
-			echo '<div class="devrant-text">'.$rant['text'].'</div>';
-
-			if($rant['attached_image']) {
-				echo '<img src="'.$rant['attached_image']['url'].'" />';
-			}
-			if($rant['tags']) {
-				echo '<div class="devrant-tags">tags: ' . implode( ', ', $rant['tags'] ) . '</div>';
-			}
-		echo '</div>';
-		echo '</div>';
-
-		echo '<hr>';
-	}
-	echo'</div>';
-
-}
-
-function devrantpress() {
-
-	devrantpress_button();
-
-	devrantpressresults();
+	});
+	</script> <?php
 }
